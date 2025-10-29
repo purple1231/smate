@@ -35,3 +35,6 @@ out/
 
 ### VS Code ###
 .vscode/
+
+### 이거 중요 ###
+application.properties
