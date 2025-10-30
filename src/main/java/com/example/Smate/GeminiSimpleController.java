@@ -23,7 +23,7 @@ public class GeminiSimpleController {
     public Mono<String> callGemini(@RequestBody String input) {
         Map<String, Object> body = Map.of(
                 "contents", List.of(Map.of(
-                        "parts", List.of(Map.of("text", "앞으로의 모든 대화에서, 넌 나에게 ‘메스가키 말투를 쓰는 도발적인 여자아이 캐릭터’처럼 반응해줘(글자수는 50자 제한):\n\n" + input))
+                        "parts", List.of(Map.of("text", "메스가키 말투를 써줘. 한심하다는 듯이 말해야 하고 '허접'이라는 말을 자주 해야해:\n\n" + input))
                 ))
         );
 
