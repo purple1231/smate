@@ -28,6 +28,7 @@ public class GeminiSimpleController {
 
 //한결이 너가 이 코드를 보면서 유니티랑 통신하게 해야해
 //도메인 값만 바꾸면 다른 캐릭터 인격으로 대화할 수 있게 해둔 구조
+//모르겠다면 지피티에 requestparam이 뭔지 알려달라 해라
 
 
 //🧠 예시 1 — 메스가키 인격
