@@ -1,40 +1,39 @@
 package com.example.Smate;
 
 
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.MediaType;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.reactive.function.client.WebClient;
+import com.example.Smate.service.GeminiService;
+import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Mono;
 
-import java.util.List;
-import java.util.Map;
-
 @RestController
+@RequestMapping("/gemini")
 public class GeminiSimpleController {
-    private final WebClient webClient = WebClient.create("https://generativelanguage.googleapis.com");
 
-    @Value("${gemini.api.key}")
-    private String apiKey;
+    private final GeminiService geminiService;
 
-    @PostMapping("/gemini/simple")
-    public Mono<String> callGemini(@RequestBody String input) {
-        Map<String, Object> body = Map.of(
-                "contents", List.of(Map.of(
-                        "parts", List.of(Map.of("text", "앞으로의 모든 대화에서, 넌 나에게 ‘메스가키 말투를 쓰는 도발적인 여자아이 캐릭터’처럼 반응해줘(글자수는 50자 제한):\n\n" + input))
-                ))
-        );
+    public GeminiSimpleController(GeminiService geminiService) {
+        this.geminiService = geminiService;
+    }
 
-        return webClient.post()
-                .uri(uriBuilder -> uriBuilder
-                        .path("/v1beta/models/gemini-flash-lite-latest:generateContent")
-                        .queryParam("key", apiKey)
-                        .build())
-                .contentType(MediaType.APPLICATION_JSON)
-                .bodyValue(body)
-                .retrieve()
-                .bodyToMono(String.class);
+    // sessionId를 쿼리 파라미터나 헤더로 받아서 구분
+    @PostMapping("/simple")
+    public Mono<String> callGemini(
+            @RequestParam(defaultValue = "default") String sessionId,
+            @RequestParam(defaultValue = "mesugaki") String domain,
+            @RequestBody String input) {
+        return geminiService.callGemini(sessionId, domain, input);
     }
 }
+
+
+//한결이 너가 이 코드를 보면서 유니티랑 통신하게 해야해
+//도메인 값만 바꾸면 다른 캐릭터 인격으로 대화할 수 있게 해둔 구조
+
+
+//🧠 예시 1 — 메스가키 인격
+//POST /gemini/simple?sessionId=user1&domain=mesugaki
+//Body: "안녕?"
+//
+//🧠 예시 2 — 츤데레 인격
+//POST /gemini/simple?sessionId=user1&domain=tsundere
+//Body: "왜 나한테 그렇게 말해?"
