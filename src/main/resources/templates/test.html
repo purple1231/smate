@@ -8,18 +8,24 @@
 </head>
 <body class="bg-gray-100 min-h-screen p-6">
 
-<div class="max-w-md mx-auto bg-white p-6 rounded shadow space-y-4">
-    <h1 class="text-xl font-bold text-center text-gray-800">Gemini 간단 테스트</h1>
+<div class="max-w-md mx-auto bg-white p-6 rounded-lg shadow-lg space-y-4">
+    <h1 class="text-xl font-bold text-center text-gray-800">Gemini 페르소나 테스트 🔮</h1>
 
-    <!-- 입력 폼 -->
+    <div class="space-y-1">
+        <label for="persona-select" class="block font-medium text-gray-700">캐릭터 선택:</label>
+        <select id="persona-select" class="w-full border rounded p-2 bg-gray-50 focus:ring-2 focus:ring-blue-500">
+            <option value="yandere" selected>얀데레 (Yandere)</option>
+            <option value="mesugaki">메스가키 (Mesugaki)</option>
+            <option value="tsundere">츤데레 (Tsundere)</option>
+        </select>
+    </div>
+
     <form id="chat-form" class="flex gap-2">
         <input type="text" id="chat-input" class="flex-1 border rounded p-2" placeholder="질문 입력..." required>
-        <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">보내기</button>
+        <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors">보내기</button>
     </form>
 
-    <!-- 채팅 박스 -->
-    <div id="chat-box" class="h-64 overflow-y-auto border rounded p-3 bg-gray-50 space-y-2 text-sm">
-        <!-- 메시지 출력됨 -->
+    <div id="chat-box" class="h-80 overflow-y-auto border rounded p-3 bg-gray-50 space-y-3 text-sm">
     </div>
 </div>
 
@@ -27,6 +33,8 @@
     const form = document.getElementById("chat-form");
     const input = document.getElementById("chat-input");
     const chatBox = document.getElementById("chat-box");
+    // 👨‍💻 2. 새로 추가한 select 요소를 가져옵니다.
+    const personaSelect = document.getElementById("persona-select");
 
     form.addEventListener("submit", async (e) => {
         e.preventDefault();
@@ -37,23 +45,43 @@
         appendMessage("나", userMsg);
         input.value = "";
 
+        // 👨‍💻 3. 선택된 페르소나 값을 가져옵니다.
+        const selectedPersona = personaSelect.value;
+        // 👨‍💻 4. API 주소에 쿼리 파라미터(?domain=값)를 동적으로 추가합니다.
+        const apiUrl = `/gemini/simple?domain=${selectedPersona}`;
+
+
         try {
-            const res = await fetch(/*[[${'/gemini/simple'}]]*/ "/gemini/simple", {
+            // 👨‍💻 5. 동적으로 만든 API 주소로 요청을 보냅니다.
+            const res = await fetch(apiUrl, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(userMsg)
+                headers: { "Content-Type": "application/json" }, // TEXT가 아닌 JSON으로 명시
+                body: userMsg // JSON.stringify()는 객체를 보낼 때 사용, 단순 텍스트는 그대로 전송
             });
 
+            if (!res.ok) { // 응답 상태가 200-299가 아닐 경우 에러 처리
+                throw new Error(`서버 에러: ${res.status}`);
+            }
+
             const data = await res.text();
-            appendMessage("Gemini", data);
+            appendMessage(selectedPersona, data); // 보낸 사람을 Gemini 대신 페르소나 이름으로 표시
         } catch (err) {
-            appendMessage("Gemini", "(에러 발생: " + err.message + ")");
+            appendMessage("시스템", `(에러 발생: ${err.message})`);
         }
     });
 
     function appendMessage(sender, message) {
         const div = document.createElement("div");
-        div.innerHTML = `<strong>${sender}:</strong> <div class="whitespace-pre-line">${message}</div>`;
+        const senderClass = sender === "나" ? "text-right" : "text-left";
+        const messageBg = sender === "나" ? "bg-blue-100" : "bg-gray-200";
+
+        div.className = `p-2 rounded-lg ${senderClass}`;
+        // 👨‍💻 6. 채팅 UI를 조금 더 보기 좋게 개선
+        div.innerHTML = `
+            <div class="font-bold text-xs mb-1">${sender}</div>
+            <div class="inline-block p-2 rounded-md ${messageBg}">
+                <div class="whitespace-pre-wrap">${message.replace(/"/g, '')}</div>
+            </div>`;
         chatBox.appendChild(div);
         chatBox.scrollTop = chatBox.scrollHeight;
     }
