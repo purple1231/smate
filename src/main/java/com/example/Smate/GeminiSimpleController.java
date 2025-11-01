@@ -19,7 +19,7 @@ public class GeminiSimpleController {
     @PostMapping("/simple")
     public Mono<String> callGemini(
             @RequestParam(defaultValue = "default") String sessionId,
-            @RequestParam(defaultValue = "mesugaki") String domain,
+            @RequestParam(defaultValue = "yandere") String domain,
             @RequestBody String input) {
         return geminiService.callGemini(sessionId, domain, input);
     }

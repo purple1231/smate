@@ -33,6 +33,21 @@ dependencies {
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testImplementation 'io.projectreactor:reactor-test'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+	// 1. API 서버를 만들기 위한 필수 도구
+	implementation 'org.springframework.boot:spring-boot-starter-web'
+
+	// 2. 데이터베이스와 쉽게 통신하게 해주는 도구
+	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+
+	// 3. 스프링이 MySQL과 대화할 수 있게 해주는 '통역기'
+	runtimeOnly 'com.mysql:mysql-connector-j'
+
+	// 4. 코드를 깔끔하게 줄여주는 마법 같은 도구
+	compileOnly 'org.projectlombok:lombok'
+	annotationProcessor 'org.projectlombok:lombok'
+
+	// 기타 이미 있던 의존성들...
+	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 
 }
 

@@ -58,7 +58,7 @@ public class GeminiService {
         // 5️⃣ Gemini API 호출
         return webClient.post()
                 .uri(uriBuilder -> uriBuilder
-                        .path("/v1beta/models/gemini-flash-lite-latest:generateContent")
+                        .path("/v1beta/models/gemini-flash-latest:generateContent")
                         .queryParam("key", apiKey)
                         .build())
                 .contentType(MediaType.APPLICATION_JSON)
