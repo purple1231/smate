@@ -12,6 +12,11 @@
     <h1 class="text-xl font-bold text-center text-gray-800">Gemini 페르소나 테스트 🔮</h1>
 
     <div class="space-y-1">
+        <label for="computer-id-input" class="block font-medium text-gray-700">컴퓨터 이름:</label>
+        <input type="text" id="computer-id-input" class="w-full border rounded p-2" placeholder="예: roy17-desktop" required>
+    </div>
+
+    <div class="space-y-1">
         <label for="persona-select" class="block font-medium text-gray-700">캐릭터 선택:</label>
         <select id="persona-select" class="w-full border rounded p-2 bg-gray-50 focus:ring-2 focus:ring-blue-500">
             <option value="yandere" selected>얀데레 (Yandere)</option>
@@ -33,58 +38,104 @@
     const form = document.getElementById("chat-form");
     const input = document.getElementById("chat-input");
     const chatBox = document.getElementById("chat-box");
-    // 👨‍💻 2. 새로 추가한 select 요소를 가져옵니다.
     const personaSelect = document.getElementById("persona-select");
+    const computerIdInput = document.getElementById("computer-id-input"); // ✨ 컴퓨터 ID 입력창 가져오기
 
     form.addEventListener("submit", async (e) => {
         e.preventDefault();
-
         const userMsg = input.value.trim();
         if (!userMsg) return;
 
         appendMessage("나", userMsg);
         input.value = "";
 
-        // 👨‍💻 3. 선택된 페르소나 값을 가져옵니다.
         const selectedPersona = personaSelect.value;
-        // 👨‍💻 4. API 주소에 쿼리 파라미터(?domain=값)를 동적으로 추가합니다.
         const apiUrl = `/gemini/simple?domain=${selectedPersona}`;
 
-
         try {
-            // 👨‍💻 5. 동적으로 만든 API 주소로 요청을 보냅니다.
             const res = await fetch(apiUrl, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" }, // TEXT가 아닌 JSON으로 명시
-                body: userMsg // JSON.stringify()는 객체를 보낼 때 사용, 단순 텍스트는 그대로 전송
+                headers: { "Content-Type": "text/plain" }, // 단순 텍스트는 text/plain이 더 정확
+                body: userMsg
             });
 
-            if (!res.ok) { // 응답 상태가 200-299가 아닐 경우 에러 처리
+            if (!res.ok) {
                 throw new Error(`서버 에러: ${res.status}`);
             }
 
             const data = await res.text();
-            appendMessage(selectedPersona, data); // 보낸 사람을 Gemini 대신 페르소나 이름으로 표시
+            appendMessage(selectedPersona, data);
         } catch (err) {
             appendMessage("시스템", `(에러 발생: ${err.message})`);
         }
     });
 
-    function appendMessage(sender, message) {
+    function appendMessage(sender, message, isRecommendation = false, recommendedApp = '') {
         const div = document.createElement("div");
         const senderClass = sender === "나" ? "text-right" : "text-left";
-        const messageBg = sender === "나" ? "bg-blue-100" : "bg-gray-200";
+        const messageBg = sender === "나" ? "bg-blue-100" : (isRecommendation ? "bg-green-100" : "bg-gray-200");
 
         div.className = `p-2 rounded-lg ${senderClass}`;
-        // 👨‍💻 6. 채팅 UI를 조금 더 보기 좋게 개선
+
+        // ✨ 추천 메시지일 경우 버튼 추가
+        const actionButton = isRecommendation
+            ? `<button onclick="executeApp('${recommendedApp}')" class="mt-2 text-xs bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600 transition-colors">✅ '${recommendedApp}' 바로 실행하기</button>`
+            : "";
+
         div.innerHTML = `
             <div class="font-bold text-xs mb-1">${sender}</div>
             <div class="inline-block p-2 rounded-md ${messageBg}">
                 <div class="whitespace-pre-wrap">${message.replace(/"/g, '')}</div>
+                ${actionButton}
             </div>`;
         chatBox.appendChild(div);
         chatBox.scrollTop = chatBox.scrollHeight;
     }
+
+    // ✨ 2. 10초마다 추천을 확인하는 함수
+    async function checkForRecommendation() {
+        const computerId = computerIdInput.value.trim();
+        if (!computerId) { // 컴퓨터 ID가 입력되지 않았으면 실행하지 않음
+            return;
+        }
+
+        try {
+            const res = await fetch(`/api/recommendation?computerId=${computerId}`);
+            if (res.ok) {
+                const data = await res.json();
+                const message = `'${data.reasonApp}' 사용 기록을 보니, '${data.recommendedApp}'도 함께 사용하면 좋을 것 같아요!`;
+                appendMessage("SMATE 추천봇", message, true, data.recommendedApp);
+            }
+            // 404 에러는 정상적인 상황(추천 없음)이므로, 콘솔에 에러를 찍지 않습니다.
+        } catch (err) {
+            console.error("추천 확인 중 에러:", err);
+        }
+    }
+
+    // ✨ 3. 파이썬(Flask) 서버에 앱 실행을 요청하는 함수
+    async function executeApp(appName) {
+        console.log(`'${appName}' 실행 요청!`);
+        try {
+            // 파이썬 Flask 서버는 보통 5000번 포트를 사용합니다.
+            const res = await fetch("http://127.0.0.1:5001/execute", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ command: appName })
+            });
+            if (!res.ok) {
+                throw new Error(`실행 서버 에러: ${res.status}`);
+            }
+            const result = await res.json();
+            appendMessage("시스템", result.message);
+
+        } catch (err) {
+            appendMessage("시스템", `'${appName}' 실행에 실패했어요. 파이썬 실행 에이전트가 켜져 있는지 확인해주세요. (에러: ${err.message})`);
+        }
+    }
+
+
+    // ✨ 페이지 로드 후 10초마다 추천 확인 시작
+    setInterval(checkForRecommendation, 10000);
 </script>
 
 </body>
