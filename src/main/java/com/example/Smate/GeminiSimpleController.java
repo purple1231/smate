@@ -1,5 +1,7 @@
 package com.example.Smate;
 
+import com.example.Smate.dto.ChatResponseDto;
+import com.example.Smate.dto.TaskDto;
 import com.example.Smate.service.GeminiService;
 import jakarta.servlet.http.HttpSession; // HttpSession import 추가!
 import org.springframework.http.ResponseEntity;
@@ -50,6 +52,23 @@ public class GeminiSimpleController {
             return ResponseEntity.status(404).body("No character selected in this session.");
         }
     }
+
+    @PostMapping("/gemini/simple")
+    public ResponseEntity<ChatResponseDto> chat(@RequestParam String sessionId,
+                                                @RequestParam String domain,
+                                                @RequestBody String userMessage) {
+        // 1️⃣ 원래 AI 대답 가져오기
+        String aiReply = geminiService.callGemini(sessionId, domain, userMessage).block();
+
+        // 2️⃣ 알람 있는지 분석해서 TaskDto 생성
+        TaskDto task = geminiService.extractTaskFromMessage(userMessage);
+
+        // 3️⃣ 최종 응답 JSON 구성
+        ChatResponseDto response =  new ChatResponseDto(aiReply, task);
+
+        return ResponseEntity.ok(response);
+    }
+
 }
 
 //한결이 너가 이 코드를 보면서 유니티랑 통신하게 해야해
