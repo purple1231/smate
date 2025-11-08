@@ -1,19 +1,25 @@
 package com.example.Smate;
 
 import com.example.Smate.service.GeminiService;
+import com.example.Smate.service.PersonaCacheService;
 import jakarta.servlet.http.HttpSession; // HttpSession import 추가!
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Mono;
 
+@Slf4j
 @RestController
 @RequestMapping("/gemini")
 public class GeminiSimpleController {
 
     private final GeminiService geminiService;
+    private final PersonaCacheService personaCacheService;
 
-    public GeminiSimpleController(GeminiService geminiService) {
+    public GeminiSimpleController(GeminiService geminiService, PersonaCacheService personaCacheService) {
         this.geminiService = geminiService;
+        this.personaCacheService = personaCacheService;
+
     }
 
     /**
@@ -26,8 +32,14 @@ public class GeminiSimpleController {
             @RequestBody String input,
             HttpSession session) { // ✨ 1. 메소드 파라미터로 HttpSession 추가
 
+
+        // 👇 [추가] "저장"하는 Key와 Value를 콘솔에 출력
+        log.info("[CACHE-SET] Key='{}', Value='{}'", sessionId, domain);
+
         // ✨ 2. 사용자가 선택한 캐릭터(domain)를 세션에 "selectedPersona" 라는 이름으로 저장
         session.setAttribute("selectedPersona", domain);
+
+        personaCacheService.setPersona(sessionId, domain);
 
         // 기존 로직은 그대로 실행
         return geminiService.callGemini(sessionId, domain, input);

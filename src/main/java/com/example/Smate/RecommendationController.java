@@ -31,11 +31,13 @@ public class RecommendationController {
         if (latestRecommendation.isPresent()) {
             Recommendation recommendation = latestRecommendation.get();
             // 3. 해당 컴퓨터의 모든 추천 기록을 삭제합니다. (다음에 또 새로운 추천을 받기 위해)
-            //recommendationRepository.deleteAllByComputerId(computerId);
+            recommendationRepository.deleteAllByComputerId(computerId);
             // 4. 찾은 추천을 반환합니다.
+            System.out.println("추천!!!!!");
             return ResponseEntity.ok(recommendation);
         } else {
             // 추천이 없다면 404 Not Found 응답을 보냅니다.
+            System.out.println("추천없음");
             return ResponseEntity.notFound().build();
         }
     }
