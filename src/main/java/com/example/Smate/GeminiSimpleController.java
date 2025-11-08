@@ -22,17 +22,26 @@ public class GeminiSimpleController {
      * Gemini API를 호출하고, 사용된 캐릭터(domain)를 세션에 저장합니다.
      */
     @PostMapping("/simple")
-    public Mono<String> callGemini(
+    public Mono<ResponseEntity<ChatResponseDto>> chat(
             @RequestParam(defaultValue = "default") String sessionId,
             @RequestParam(defaultValue = "yandere") String domain,
-            @RequestBody String input,
-            HttpSession session) { // ✨ 1. 메소드 파라미터로 HttpSession 추가
-
-        // ✨ 2. 사용자가 선택한 캐릭터(domain)를 세션에 "selectedPersona" 라는 이름으로 저장
+            @RequestBody String userMessage,
+            HttpSession session
+    ) {
+        // 세션에 이번에 쓴 캐릭터 저장
         session.setAttribute("selectedPersona", domain);
 
-        // 기존 로직은 그대로 실행
-        return geminiService.callGemini(sessionId, domain, input);
+        // 1) 먼저 본 대답 비동기로 받기
+        Mono<String> aiMono = geminiService.callGemini(sessionId, domain, userMessage);
+
+        // 2) 동시에 알람 후보 뽑기 (이건 동기 코드라고 가정)
+        TaskDto task = geminiService.extractTaskFromMessage(userMessage);
+
+        // 3) 둘을 합쳐서 내려줌
+        return aiMono.map(aiReply -> {
+            ChatResponseDto dto = new ChatResponseDto(aiReply, task);
+            return ResponseEntity.ok(dto);
+        });
     }
 
     /**
@@ -53,21 +62,6 @@ public class GeminiSimpleController {
         }
     }
 
-    @PostMapping("/gemini/simple")
-    public ResponseEntity<ChatResponseDto> chat(@RequestParam String sessionId,
-                                                @RequestParam String domain,
-                                                @RequestBody String userMessage) {
-        // 1️⃣ 원래 AI 대답 가져오기
-        String aiReply = geminiService.callGemini(sessionId, domain, userMessage).block();
-
-        // 2️⃣ 알람 있는지 분석해서 TaskDto 생성
-        TaskDto task = geminiService.extractTaskFromMessage(userMessage);
-
-        // 3️⃣ 최종 응답 JSON 구성
-        ChatResponseDto response =  new ChatResponseDto(aiReply, task);
-
-        return ResponseEntity.ok(response);
-    }
 
 }
 
