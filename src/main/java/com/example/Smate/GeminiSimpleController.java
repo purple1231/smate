@@ -49,6 +49,7 @@ public class GeminiSimpleController {
 
         // 2) 알람/일정 추출하기 (동기)
         TaskDto task = geminiService.extractTaskFromMessage(userMessage);
+        System.out.println(task);
 
         // 3) (A)와 (B)를 합쳐서 ChatResponseDto로 반환
         return aiMono.map(aiReply -> {
