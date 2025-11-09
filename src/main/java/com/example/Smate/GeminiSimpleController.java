@@ -1,53 +1,66 @@
 package com.example.Smate;
 
+import com.example.Smate.dto.ChatResponseDto;
+import com.example.Smate.dto.TaskDto;
 import com.example.Smate.service.GeminiService;
-import com.example.Smate.service.PersonaCacheService;
-import jakarta.servlet.http.HttpSession; // HttpSession import 추가!
-import lombok.extern.slf4j.Slf4j;
+import com.example.Smate.service.PersonaCacheService; // ✨ 1. 기존 캐시 서비스 Import
+import jakarta.servlet.http.HttpSession;
+import lombok.extern.slf4j.Slf4j; // ✨ 2. Slf4j Import
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Mono;
 
-@Slf4j
+@Slf4j // ✨ 3. @Slf4j 어노테이션 추가
 @RestController
 @RequestMapping("/gemini")
 public class GeminiSimpleController {
 
     private final GeminiService geminiService;
-    private final PersonaCacheService personaCacheService;
+    private final PersonaCacheService personaCacheService; // ✨ 4. 기존 캐시 서비스 의존성 추가
 
+    // ✨ 5. 생성자 수정
     public GeminiSimpleController(GeminiService geminiService, PersonaCacheService personaCacheService) {
         this.geminiService = geminiService;
         this.personaCacheService = personaCacheService;
-
     }
 
     /**
-     * Gemini API를 호출하고, 사용된 캐릭터(domain)를 세션에 저장합니다.
+     * Gemini API를 호출하고, 알람을 추출하며, 사용된 캐릭터(domain)를 세션과 캐시에 저장합니다.
      */
     @PostMapping("/simple")
-    public Mono<String> callGemini(
-            @RequestParam(defaultValue = "default") String sessionId,
-            @RequestParam(defaultValue = "yandere") String domain,
-            @RequestBody String input,
-            HttpSession session) { // ✨ 1. 메소드 파라미터로 HttpSession 추가
+    public Mono<ResponseEntity<ChatResponseDto>> chat( // ✨ 6. 반환 타입 변경 (친구 코드 적용)
+                                                       @RequestParam(defaultValue = "default") String sessionId,
+                                                       @RequestParam(defaultValue = "yandere") String domain,
+                                                       @RequestBody String userMessage, // ✨ 7. 변수명 변경 (input -> userMessage)
+                                                       HttpSession session
+    ) {
 
-
-        // 👇 [추가] "저장"하는 Key와 Value를 콘솔에 출력
+        // --- (A) 김진근로직임!!!!! (로그 및 캐시 저장) ---
         log.info("[CACHE-SET] Key='{}', Value='{}'", sessionId, domain);
-
-        // ✨ 2. 사용자가 선택한 캐릭터(domain)를 세션에 "selectedPersona" 라는 이름으로 저장
         session.setAttribute("selectedPersona", domain);
-
         personaCacheService.setPersona(sessionId, domain);
+        // ----------------------------------------------
 
-        // 기존 로직은 그대로 실행
-        return geminiService.callGemini(sessionId, domain, input);
+
+        // --- (B) 한결이로직임! (AI 응답 + 알람 추출) ---
+
+        // 1) AI 대화 응답 받기 (비동기)
+        Mono<String> aiMono = geminiService.callGemini(sessionId, domain, userMessage);
+
+        // 2) 알람/일정 추출하기 (동기)
+        TaskDto task = geminiService.extractTaskFromMessage(userMessage);
+
+        // 3) (A)와 (B)를 합쳐서 ChatResponseDto로 반환
+        return aiMono.map(aiReply -> {
+            ChatResponseDto dto = new ChatResponseDto(aiReply, task);
+            return ResponseEntity.ok(dto);
+        });
+        // ----------------------------------------------
     }
 
     /**
-     * ✨ 3. [신규 API] 현재 세션에 저장된 캐릭터 정보를 확인하는 API
-     * 다른 서비스(로그 분석 등)에서 이 API를 호출하여 현재 캐릭터를 알아낼 수 있습니다.
+     * [신규 API] 현재 세션에 저장된 캐릭터 정보를 확인하는 API
+     * (이 코드는 두 분 다 동일합니다)
      */
     @GetMapping("/character")
     public ResponseEntity<String> getCurrentCharacter(HttpSession session) {
@@ -63,16 +76,3 @@ public class GeminiSimpleController {
         }
     }
 }
-
-//한결이 너가 이 코드를 보면서 유니티랑 통신하게 해야해
-//도메인 값만 바꾸면 다른 캐릭터 인격으로 대화할 수 있게 해둔 구조
-//모르겠다면 지피티에 requestparam이 뭔지 알려달라 해라
-
-
-//🧠 예시 1 — 메스가키 인격
-//POST /gemini/simple?sessionId=user1&domain=mesugaki
-//Body: "안녕?"
-//
-//🧠 예시 2 — 츤데레 인격
-//POST /gemini/simple?sessionId=user1&domain=tsundere
-//Body: "왜 나한테 그렇게 말해?"
