@@ -2,16 +2,19 @@ package com.example.Smate.service;
 
 import com.example.Smate.domain.Persona;
 import com.example.Smate.domain.PersonaRepository;
+import com.example.Smate.dto.ChatResponseDto;
 import com.example.Smate.dto.TaskDto;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
 import java.util.*;
+import java.util.Base64;
 
 @Service
 public class GeminiService {
@@ -21,10 +24,9 @@ public class GeminiService {
     @Value("${gemini.api.key}")
     private String apiKey;
 
-    // 예전 코드처럼 세션별 대화 기억
+    // 세션별 간단 메모리
     private final Map<String, Deque<String>> sessionMemory = new HashMap<>();
 
-    // ✅ 예전이랑 똑같은 모델 경로만 상수로 뺐음
     private static final String GEMINI_PATH =
             "/v1beta/models/gemini-flash-latest:generateContent";
 
@@ -34,9 +36,9 @@ public class GeminiService {
         this.webClient = WebClient.create("https://generativelanguage.googleapis.com");
     }
 
+    // ====== 텍스트만 ======
     public Mono<String> callGemini(String sessionId, String domain, String input) {
         Persona persona = PersonaRepository.getPersona(domain);
-
         Deque<String> history = sessionMemory.computeIfAbsent(sessionId, k -> new LinkedList<>());
 
         StringBuilder context = new StringBuilder();
@@ -69,17 +71,85 @@ public class GeminiService {
                 .bodyValue(body)
                 .retrieve()
                 .bodyToMono(String.class)
-                .map(this::extractFirstText)             // ✅ 여기서 딱 text만 뽑아줌
+                .map(this::extractFirstText)
                 .doOnNext(reply -> {
                     history.addLast("Q: " + input + "\nA: " + reply);
                     if (history.size() > 10) history.removeFirst();
                 });
     }
 
+    public Mono<ChatResponseDto> callGeminiWithImage(String sessionId,
+                                                     String domain,
+                                                     String userMessage,
+                                                     MultipartFile screenshot) {
+        Persona persona = PersonaRepository.getPersona(domain);
+        Deque<String> history = sessionMemory.computeIfAbsent(sessionId, k -> new LinkedList<>());
+        StringBuilder context = new StringBuilder();
+        for (String h : history) {
+            context.append(h).append("\n");
+        }
 
-    // ✅ 같은 엔드포인트로 알람용 텍스트만 뽑는 메서드
+        return Mono.fromCallable(() -> Base64.getEncoder().encodeToString(screenshot.getBytes()))
+                .flatMap(base64Image -> {
+                    // ① 여기서 네가 쓰는 모델 이름을 확인
+                    // 지금 properties에는 flash-lite 넣어놨는데, 서비스에서는 1.5-flash를 호출하고 있었음
+                    Map<String, Object> body = Map.of(
+                            "contents", List.of(Map.of(
+                                    "parts", List.of(
+                                            Map.of("text",
+                                                    """
+                                                    %s
+                                                    이전 대화:
+                                                    %s
+                                                    지금부터 사용자가 보낸 스크린샷 화면을 보고 문제를 설명하고,
+                                                    요청한 내용이 무엇인지 한국어로 설명하라.
+                                                    """.formatted(persona.getDescription(), context)
+                                            ),
+                                            Map.of(
+                                                    "inlineData", Map.of(
+                                                            "mimeType", "image/png",
+                                                            "data", base64Image
+                                                    )
+                                            ),
+                                            Map.of("text", "사용자 추가 설명: " + userMessage)
+                                    )
+                            ))
+                    );
+
+                    return webClient.post()
+                            .uri(uriBuilder -> uriBuilder
+                                    // 🔴 여기 모델 이름을 너 설정이랑 맞춰보자
+                                    // .path("/v1beta/models/gemini-1.5-flash:generateContent")
+                                    .path("/v1beta/models/gemini-flash-lite-latest:generateContent")
+                                    .queryParam("key", apiKey)
+                                    .build())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .bodyValue(body)
+                            .retrieve()
+                            .bodyToMono(String.class)
+                            // ② 실제 원본 응답을 로그로 찍는다
+                            .doOnNext(raw -> System.out.println("[GEMINI RAW IMAGE RESP] " + raw));
+                })
+                .map(raw -> {
+                    String replyText = extractFirstText(raw);
+                    TaskDto task = extractTaskFromMessage(userMessage);
+
+                    history.addLast("Q(이미지): " + userMessage + "\nA: " + replyText);
+                    if (history.size() > 10) history.removeFirst();
+
+                    return new ChatResponseDto(replyText, task);
+                })
+                // ③ 여기서 실제 에러를 찍어본다
+                .onErrorResume(e -> {
+                    e.printStackTrace(); // 콘솔에 실제 이유 표시
+                    return Mono.just(new ChatResponseDto("이미지 분석 중 오류가 발생했습니다.", new TaskDto(null, null)));
+                });
+    }
+
+
+
+    // ====== 알람용 ======
     public TaskDto extractTaskFromMessage(String userMessage) {
-        // 모델한테 “JSON만 줘”라고 시키는 프롬프트
         String prompt = """
                 너는 '알람 일정 추출기'다.
                 사용자가 쓴 한국어 문장 안에 알람/일정/리마인드 요청이 있으면
@@ -94,7 +164,7 @@ public class GeminiService {
                 - text 는 자연스럽고 짧게.
                 - 만약 알람 요청이 전혀 없으면 {"time": null, "text": null} 만 출력.
                 - 설명, 말풍선, 해설 절대 쓰지 마. JSON 문자열만 보내.
-                
+
                 문장: "%s"
                 """.formatted(userMessage);
 
@@ -105,7 +175,6 @@ public class GeminiService {
         );
 
         try {
-            // ✅ 위에 있는 것과 똑같은 방식으로 호출
             String raw = webClient.post()
                     .uri(uriBuilder -> uriBuilder
                             .path(GEMINI_PATH)
@@ -115,33 +184,41 @@ public class GeminiService {
                     .bodyValue(body)
                     .retrieve()
                     .bodyToMono(String.class)
-                    .block();  // 여기서는 동기로 받아서 Unity에 바로 넘길 수 있게 함
+                    .block();
 
-            // Gemini 전체 응답에서 text 부분만 뽑기
             String jsonText = extractFirstText(raw);
 
             if (jsonText == null || jsonText.isBlank()) {
                 return new TaskDto(null, null);
             }
 
-            // 그 text가 우리가 시킨 JSON이므로 그대로 파싱
             return objectMapper.readValue(jsonText, TaskDto.class);
 
         } catch (Exception e) {
-            // 실패하면 Unity 쪽에 null/null 보내도록
             return new TaskDto(null, null);
         }
     }
 
-    // ✅ candidates[0].content.parts[0].text 뽑는 보조 메서드
+    // ====== 공통 파서 ======
     private String extractFirstText(String geminiRaw) {
         try {
             JsonNode root = objectMapper.readTree(geminiRaw);
-            return root.get("candidates").get(0)
-                    .get("content").get("parts").get(0)
-                    .get("text").asText();
+            JsonNode candidates = root.get("candidates");
+            if (candidates == null || !candidates.isArray() || candidates.isEmpty()) {
+                System.out.println("[GEMINI PARSE] no candidates: " + geminiRaw);
+                return "이미지에서 설명할 수 있는 텍스트를 찾지 못했습니다.";
+            }
+            JsonNode first = candidates.get(0);
+            JsonNode parts = first.path("content").path("parts");
+            if (!parts.isArray() || parts.isEmpty()) {
+                System.out.println("[GEMINI PARSE] no parts: " + geminiRaw);
+                return "이미지에서 설명할 수 있는 텍스트를 찾지 못했습니다.";
+            }
+            return parts.get(0).path("text").asText();
         } catch (Exception e) {
-            return null;
+            e.printStackTrace();
+            return "이미지 응답 파싱 중 오류가 발생했습니다.";
         }
     }
+
 }

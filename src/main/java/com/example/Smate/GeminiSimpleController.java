@@ -4,8 +4,10 @@ import com.example.Smate.dto.ChatResponseDto;
 import com.example.Smate.dto.TaskDto;
 import com.example.Smate.service.GeminiService;
 import jakarta.servlet.http.HttpSession; // HttpSession import 추가!
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 import reactor.core.publisher.Mono;
 
 @RestController
@@ -42,6 +44,24 @@ public class GeminiSimpleController {
             ChatResponseDto dto = new ChatResponseDto(aiReply, task);
             return ResponseEntity.ok(dto);
         });
+    }
+
+    @PostMapping(value = "/simple/with-image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Mono<ResponseEntity<ChatResponseDto>> chatWithImage(
+            @RequestParam(defaultValue = "default") String sessionId,
+            @RequestParam(defaultValue = "yandere") String domain,
+            @RequestPart("message") String userMessage,
+            @RequestPart("screenshot") MultipartFile screenshot,
+            HttpSession session
+    ) {
+        session.setAttribute("selectedPersona", domain);
+
+        // 1) screenshot.getBytes() 해서 Gemini Vision 계열로 던지거나
+        // 2) 로컬에 저장 후 경로 넘기거나
+        // 3) Base64로 변환해서 프롬프트에 넣거나
+        // 중 하나를 서비스에서 처리
+        return geminiService.callGeminiWithImage(sessionId, domain, userMessage, screenshot)
+                .map(ResponseEntity::ok);
     }
 
     /**
