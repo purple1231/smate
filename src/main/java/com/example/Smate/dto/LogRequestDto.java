@@ -12,4 +12,5 @@ public class LogRequestDto {
     private String processPath;
     private LocalDateTime logTimestamp;
     private String computerId;
+    private String logType;
 }

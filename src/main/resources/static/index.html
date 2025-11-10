@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>앱 사용 통계</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="container">
+    <h1>📊 지난 7일간 앱 사용 통계</h1>
+    <p>컴퓨터 ID: <b id="computerIdText">...</b> (그래프의 막대를 클릭하면 연관 앱을 볼 수 있습니다)</p>
+
+    <div class="chart-container">
+        <canvas id="weeklyChart"></canvas>
+    </div>
+
+    <div id="coUsageSection" class="hidden">
+        <h2 id="coUsageTitle">...</h2>
+        <div class="chart-container">
+            <canvas id="coUsageChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<script src="/js/app.js"></script>
+</body>
+</html>
