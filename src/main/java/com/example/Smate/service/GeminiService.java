@@ -90,56 +90,91 @@ public class GeminiService {
 
 
     /**
-     * ⭐️ [신규] 멀티모달(텍스트 + 이미지) API 호출
+     * ⭐️ [수정됨] 멀티모달(텍스트 + 이미지) API 호출
+     * - 'input' 값에 따라 프롬프트를 분기합니다.
      */
     public Mono<String> callGeminiWithVision(String sessionId, String domain, String input, byte[] imageBytes) {
         Persona persona = PersonaRepository.getPersona(domain);
         Deque<String> history = sessionMemory.computeIfAbsent(sessionId, k -> new LinkedList<>());
 
-        // 1. 대화 이력 (History) 빌드 (기존과 동일)
-        StringBuilder context = new StringBuilder();
-        for (String h : history) {
-            context.append(h).append("\n");
+        String textPrompt; // ⭐️ 프롬프트를 담을 변수
+
+        // ⭐️ [핵심] 'input' 값에 따라 프롬프트 분기
+        if ("[SYSTEM_SCREENSHOT]".equals(input)) {
+            // 1. (신규) 시스템 스크린샷용 "재밌는 말" 프롬프트
+            // log.info("[Vision] 시스템 스크린샷용 '재밌는 말' 프롬프트 사용"); // (로그 추가)
+            textPrompt = """
+                    %s
+                    [규칙]
+                    1. 방금 사용자의 데스크탑 화면 스크린샷을 받았어. (사용자는 이걸 몰라)
+                    2. 넌 이 화면을 보고 사용자의 현재 상황에 대해 '재치있거나', '재미있는' 한 마디를 해야 해.
+                    3.  화면에 '커비'나 '시호' 같은 애니메이션 캐릭터(아바타)가 보일 수 있는데, 그건 '너' 자신이야.
+                       **이 캐릭터에 대해서는 절대 언급하거나 반응하지 마.**
+                       오직 사용자가 '무엇을 하고 있는지'(예: 코딩, 웹 서핑, 바탕화면)에 대해서만 집중해서 말해.
+                    4. 너의 페르소나를 완벽하게 유지하면서, 너무 길지 않게 한두 문장으로 말해줘.
+                    5. ⭐️ [중요] 이 응답은 사용자가 직접 물어본 것이 아니므로, 절대 대화 이력(History)에 저장하면 안 돼.
+                    
+                    [예시: (페르소나: 츤데레)]
+                    (화면: 코딩 중) -> "흥... 또 에러난 거야? 맨날 그것도 못하고."
+                    (화면: 유튜브 시청) -> "쯧... 한가하게 놀고 있네. 뭐, 잠깐 쉬는 것도 나쁘진 않지만."
+                    (화면: 바탕화면) -> "왜 아무것도 안 해? 혹시... 내 생각이라도 하는 거야? ...바보."
+                    
+                    [실제 응답]
+                    """.formatted(persona.getDescription());
+
+        } else {
+            // 2. (기존) 사용자 질문용 "여기서..." 프롬프트
+            // log.info("[Vision] 사용자 질문용 '여기서' 프롬프트 사용"); // (로그 추가)
+
+            // 1. 대화 이력 (History) 빌드
+            StringBuilder context = new StringBuilder();
+            for (String h : history) {
+                context.append(h).append("\n");
+            }
+
+            textPrompt = """
+                    %s
+                    [규칙]
+                    1. 너는 사용자의 데스크탑 화면을 함께 보고 있어.
+                    2. 사용자가 "여기서" 라고 말하면 함께 전송된 스크린샷을 의미하는 거야.
+                    3. 스크린샷을 보고 사용자의 질문에 대답해.
+                    4.  화면에 '커비'나 '시호' 같은 애니메이션 캐릭터(아바타)가 보일 수 있는데, 그건 '너' 자신이야.
+                       **이 캐릭터에 대해서는 절대 언급하거나 반응하지 마.**
+                       오직 사용자가 '무엇을 하고 있는지'(예: 코딩, 웹 서핑, 바탕화면)에 대해서만 집중해서 말해.
+                    [이전 대화]
+                    %s
+                    [사용자 질문]
+                    %s
+                    """.formatted(persona.getDescription(), context, input);
         }
 
-        // 2. 텍스트 프롬프트 빌드 (기존과 동일)
-        String textPrompt = """
-                %s
-                [규칙]
-                1. 너는 사용자의 데스크탑 화면을 함께 보고 있어.
-                2. 사용자가 "여기서" 라고 말하면 함께 전송된 스크린샷을 의미하는 거야.
-                3. 스크린샷을 보고 사용자의 질문에 대답해.
-                [이전 대화]
-                %s
-                [사용자 질문]
-                %s
-                """.formatted(persona.getDescription(), context, input);
-
-        // 3. 이미지 Base64 인코딩
+        // 3. 이미지 Base64 인코딩 (공통)
         String imageBase64 = Base64.getEncoder().encodeToString(imageBytes);
 
-        // 4. 멀티모달(텍스트 + 이미지) 요청 본문(Body) 생성 (DTO 클래스들은 하단에 정의)
+        // 4. 멀티모달 요청 본문(Body) 생성 (공통)
         List<VisionPart> parts = new ArrayList<>();
-        parts.add(new VisionPart(textPrompt)); // 텍스트 파트
-        parts.add(new VisionPart(new InlineData("image/png", imageBase64))); // 이미지 파트
+        parts.add(new VisionPart(textPrompt)); // ⭐️ 분기된 textPrompt 사용
+        parts.add(new VisionPart(new InlineData("image/png", imageBase64)));
 
         VisionRequest body = new VisionRequest(List.of(new VisionContent(parts)));
 
-        // 5. API 호출
+        // 5. API 호출 (공통)
         return webClient.post()
                 .uri(uriBuilder -> uriBuilder
-                        .path(GEMINI_PATH) // ⭐️ 엔드포인트는 gemini-flash-latest로 동일
+                        .path(GEMINI_PATH)
                         .queryParam("key", apiKey)
                         .build())
                 .contentType(MediaType.APPLICATION_JSON)
-                .bodyValue(body) // ⭐️ [수정] 멀티모달 본문 사용
+                .bodyValue(body)
                 .retrieve()
                 .bodyToMono(String.class)
-                .map(this::extractFirstText) // ⭐️ [동일] 응답 DTO 구조는 text-only와 동일
+                .map(this::extractFirstText)
                 .doOnNext(reply -> {
-                    // 이력에 (텍스트) 질문/답변 저장 (기존과 동일)
-                    history.addLast("Q: " + input + "\nA: " + reply);
-                    if (history.size() > 10) history.removeFirst();
+                    // ⭐️ [수정] 시스템 스크린샷이 아닐 때만 대화 이력에 저장
+                    if (!"[SYSTEM_SCREENSHOT]".equals(input)) {
+                        history.addLast("Q: " + input + "\nA: " + reply);
+                        if (history.size() > 10) history.removeFirst();
+                    }
                 });
     }
 

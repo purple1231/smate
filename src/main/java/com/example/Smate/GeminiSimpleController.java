@@ -56,12 +56,13 @@ public class GeminiSimpleController {
         }
 
 
-        // --- ⭐️ [수정됨] 3단계 우선순위 로직 ---
+        // --- ⭐️ 3단계 우선순위 로직 ---
 
         // 1) ⭐️ (1순위) "켜줘" 로직 (텍스트 전용)
         String executionResponse = geminiService.handleExecutionRequest(question, computerId);
         if (executionResponse != null) {
             log.info("앱 실행 감지: {}", executionResponse);
+            // ⭐️ "CHAT" 타입으로 응답 (기본 생성자)
             ChatResponseDto dto = new ChatResponseDto(executionResponse, new TaskDto(null, null));
             return Mono.just(ResponseEntity.ok(dto));
         }
@@ -76,8 +77,8 @@ public class GeminiSimpleController {
             // 3-1) [신규] 스크린샷이 있으면 '비전(Vision)' 메서드 호출
             log.info("[Chat] 비전(멀티모달) API 호출");
             try {
-                // MultipartFile을 byte[]로 변환
                 byte[] imageBytes = screenshot.getBytes();
+                // ⭐️ [SYSTEM_SCREENSHOT]이든, 사용자 질문이든 일단 'question'을 그대로 넘김
                 aiMono = geminiService.callGeminiWithVision(sessionId, domain, question, imageBytes);
             } catch (IOException e) {
                 log.error("스크린샷 바이트 변환 실패", e);
@@ -94,7 +95,15 @@ public class GeminiSimpleController {
             if (task.getTime() != null && task.getText() != null) {
                 log.info("알람 추출 감지 (대화 중): {}", task.getText());
             }
-            ChatResponseDto dto = new ChatResponseDto(aiReply, task);
+
+            // ⭐️⭐️⭐️ [핵심 수정] ⭐️⭐️⭐️
+            // ----------------------------------------------
+            // 'question'이 [SYSTEM_SCREENSHOT]이었는지 확인하여 DTO의 'type'을 결정
+            String responseType = "[SYSTEM_SCREENSHOT]".equals(question) ? "SYSTEM_REMARK" : "CHAT";
+
+            ChatResponseDto dto = new ChatResponseDto(aiReply, task, responseType);
+            // ----------------------------------------------
+
             return ResponseEntity.ok(dto);
         });
         // ----------------------------------------------
