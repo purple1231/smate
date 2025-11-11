@@ -9,12 +9,13 @@ import com.example.Smate.dto.TaskDto;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired; // ⭐️ [추가]
+import com.fasterxml.jackson.annotation.JsonProperty;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
-
+import java.util.Base64; // ⭐️ [추가] Base64 임포트
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -86,6 +87,62 @@ public class GeminiService {
                     if (history.size() > 10) history.removeFirst();
                 });
     }
+
+
+    /**
+     * ⭐️ [신규] 멀티모달(텍스트 + 이미지) API 호출
+     */
+    public Mono<String> callGeminiWithVision(String sessionId, String domain, String input, byte[] imageBytes) {
+        Persona persona = PersonaRepository.getPersona(domain);
+        Deque<String> history = sessionMemory.computeIfAbsent(sessionId, k -> new LinkedList<>());
+
+        // 1. 대화 이력 (History) 빌드 (기존과 동일)
+        StringBuilder context = new StringBuilder();
+        for (String h : history) {
+            context.append(h).append("\n");
+        }
+
+        // 2. 텍스트 프롬프트 빌드 (기존과 동일)
+        String textPrompt = """
+                %s
+                [규칙]
+                1. 너는 사용자의 데스크탑 화면을 함께 보고 있어.
+                2. 사용자가 "여기서" 라고 말하면 함께 전송된 스크린샷을 의미하는 거야.
+                3. 스크린샷을 보고 사용자의 질문에 대답해.
+                [이전 대화]
+                %s
+                [사용자 질문]
+                %s
+                """.formatted(persona.getDescription(), context, input);
+
+        // 3. 이미지 Base64 인코딩
+        String imageBase64 = Base64.getEncoder().encodeToString(imageBytes);
+
+        // 4. 멀티모달(텍스트 + 이미지) 요청 본문(Body) 생성 (DTO 클래스들은 하단에 정의)
+        List<VisionPart> parts = new ArrayList<>();
+        parts.add(new VisionPart(textPrompt)); // 텍스트 파트
+        parts.add(new VisionPart(new InlineData("image/png", imageBase64))); // 이미지 파트
+
+        VisionRequest body = new VisionRequest(List.of(new VisionContent(parts)));
+
+        // 5. API 호출
+        return webClient.post()
+                .uri(uriBuilder -> uriBuilder
+                        .path(GEMINI_PATH) // ⭐️ 엔드포인트는 gemini-flash-latest로 동일
+                        .queryParam("key", apiKey)
+                        .build())
+                .contentType(MediaType.APPLICATION_JSON)
+                .bodyValue(body) // ⭐️ [수정] 멀티모달 본문 사용
+                .retrieve()
+                .bodyToMono(String.class)
+                .map(this::extractFirstText) // ⭐️ [동일] 응답 DTO 구조는 text-only와 동일
+                .doOnNext(reply -> {
+                    // 이력에 (텍스트) 질문/답변 저장 (기존과 동일)
+                    history.addLast("Q: " + input + "\nA: " + reply);
+                    if (history.size() > 10) history.removeFirst();
+                });
+    }
+
 
     // ... (extractTaskFromMessage 메서드는 기존과 동일) ...
     public TaskDto extractTaskFromMessage(String userMessage) {
@@ -297,4 +354,63 @@ public class GeminiService {
             return null;
         }
     }
+
+
+
+
+    // --- ⭐️ [신규] 멀티모달 요청을 위한 DTO 클래스들 ---
+
+    private static class VisionRequest {
+        @JsonProperty("contents")
+        public List<VisionContent> contents;
+
+        public VisionRequest(List<VisionContent> contents) {
+            this.contents = contents;
+        }
+    }
+
+    private static class VisionContent {
+        @JsonProperty("parts")
+        public List<VisionPart> parts;
+
+        public VisionContent(List<VisionPart> parts) {
+            this.parts = parts;
+        }
+    }
+
+    private static class VisionPart {
+        @JsonProperty("text")
+        public String text;
+
+        @JsonProperty("inlineData")
+        public InlineData inlineData;
+
+        // 텍스트 파트용 생성자
+        public VisionPart(String text) {
+            this.text = text;
+            this.inlineData = null;
+        }
+
+        // 이미지 파트용 생성자
+        public VisionPart(InlineData inlineData) {
+            this.text = null;
+            this.inlineData = inlineData;
+        }
+    }
+
+    private static class InlineData {
+        @JsonProperty("mimeType")
+        public String mimeType;
+
+        @JsonProperty("data")
+        public String data;
+
+        public InlineData(String mimeType, String data) {
+            this.mimeType = mimeType;
+            this.data = data;
+        }
+    }
+    // ------------------------------------------------
+
+
 }

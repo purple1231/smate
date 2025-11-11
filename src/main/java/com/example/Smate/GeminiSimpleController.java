@@ -9,6 +9,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Mono;
+import org.springframework.web.multipart.MultipartFile;
+import java.io.IOException;
+
 
 @Slf4j
 @RestController
@@ -34,7 +37,8 @@ public class GeminiSimpleController {
             @RequestParam(defaultValue = "default") String sessionId,
             @RequestParam(defaultValue = "yandere") String domain,
             @RequestParam String computerId, // ⭐️ [필수] 프론트에서 computerId를 받아야 함
-            @RequestBody String userMessage,
+            @RequestParam("question") String question,
+            @RequestParam(value = "screenshot", required = false) MultipartFile screenshot,
             HttpSession session
     ) {
 
@@ -45,40 +49,52 @@ public class GeminiSimpleController {
         // ----------------------------------------------
 
 
-        // --- (B) ⭐️ [수정] 3단계 우선순위 로직 ---
+        // ⭐️ [추가] 스크린샷이 제대로 수신되었는지 로그 확인
+        if (screenshot != null && !screenshot.isEmpty()) {
+            log.info("[Chat] 스크린샷 수신 성공! 파일명: {}, 크기: {} bytes",
+                    screenshot.getOriginalFilename(), screenshot.getSize());
+        }
 
-        // 1) ⭐️ (1순위) "켜줘"가 있는지 확인 (앱 실행)
-        // GeminiService는 "켜줘"가 있을 때만 응답(성공/실패)을 반환하고, 없으면 null을 반환합니다.
-        String executionResponse = geminiService.handleExecutionRequest(userMessage, computerId);
 
+        // --- ⭐️ [수정됨] 3단계 우선순위 로직 ---
+
+        // 1) ⭐️ (1순위) "켜줘" 로직 (텍스트 전용)
+        String executionResponse = geminiService.handleExecutionRequest(question, computerId);
         if (executionResponse != null) {
-            // "켜줘" 명령이 감지됨! (성공이든 실패든)
-            // 즉시 앱 실행 결과만 반환하고, 알람/잡담 로직은 무시합니다.
             log.info("앱 실행 감지: {}", executionResponse);
             ChatResponseDto dto = new ChatResponseDto(executionResponse, new TaskDto(null, null));
             return Mono.just(ResponseEntity.ok(dto));
         }
 
-        // 2) ⭐️ (2순위) "켜줘"가 없었을 때만, "알람/일정" 확인
-        TaskDto task = geminiService.extractTaskFromMessage(userMessage);
+        // 2) ⭐️ (2순위) "알람/일정" 로직 (텍스트 전용)
+        TaskDto task = geminiService.extractTaskFromMessage(question);
 
-        // 3) ⭐️ (3순위) "켜줘"가 없었을 때만, "일반 대화" 실행
-        Mono<String> aiMono = geminiService.callGemini(sessionId, domain, userMessage);
+        // 3) ⭐️ (3순위) "일반 대화" (스크린샷 유무에 따라 분기)
+        Mono<String> aiMono;
 
-        // 3-1) (알람 O, 일반대화 O)
-        if (task.getTime() != null && task.getText() != null) {
-            log.info("알람 추출 감지: {}", task.getText());
-            return aiMono.map(aiReply -> {
-                // 알람과 AI 응답을 둘 다 반환
-                ChatResponseDto dto = new ChatResponseDto(aiReply, task);
-                return ResponseEntity.ok(dto);
-            });
+        if (screenshot != null && !screenshot.isEmpty()) {
+            // 3-1) [신규] 스크린샷이 있으면 '비전(Vision)' 메서드 호출
+            log.info("[Chat] 비전(멀티모달) API 호출");
+            try {
+                // MultipartFile을 byte[]로 변환
+                byte[] imageBytes = screenshot.getBytes();
+                aiMono = geminiService.callGeminiWithVision(sessionId, domain, question, imageBytes);
+            } catch (IOException e) {
+                log.error("스크린샷 바이트 변환 실패", e);
+                aiMono = Mono.just("앗! 스크린샷을 읽다가 오류가 났어. 😢");
+            }
+        } else {
+            // 3-2) [기존] 스크린샷이 없으면 '텍스트' 메서드 호출
+            log.info("[Chat] 일반(텍스트) API 호출");
+            aiMono = geminiService.callGemini(sessionId, domain, question);
         }
 
-        // 3-2) (알람 X, 일반대화 O)
-        log.info("일반 대화 처리");
+        // 4) ⭐️ (공통) 알람 결과와 AI 응답 결합
         return aiMono.map(aiReply -> {
-            ChatResponseDto dto = new ChatResponseDto(aiReply, task); // task는 (null, null)
+            if (task.getTime() != null && task.getText() != null) {
+                log.info("알람 추출 감지 (대화 중): {}", task.getText());
+            }
+            ChatResponseDto dto = new ChatResponseDto(aiReply, task);
             return ResponseEntity.ok(dto);
         });
         // ----------------------------------------------
@@ -91,6 +107,7 @@ public class GeminiSimpleController {
      */
     @GetMapping("/character")
     public ResponseEntity<String> getCurrentCharacter(HttpSession session) {
+        // ... (이하 로직 동일) ...
         String selectedPersona = (String) session.getAttribute("selectedPersona");
         if (selectedPersona != null) {
             return ResponseEntity.ok(selectedPersona);
