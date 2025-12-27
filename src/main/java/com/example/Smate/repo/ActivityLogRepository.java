@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
-// JpaRepository를 상속받는 것만으로 기본적인 CRUD 기능이 모두 자동 생성됩니다.
+// JpaRepository를 상속받는 것만으로 기본적인 CRUD 기능이 모두 자동 생성.
 public interface ActivityLogRepository extends JpaRepository<ActivityLog, Long> {
 
     // (기존 메소드)
@@ -36,7 +36,6 @@ public interface ActivityLogRepository extends JpaRepository<ActivityLog, Long> 
     );
 
 
-    // ⭐️ [핵심 수정] 메서드 이름에 'AndLogType'이 꼭 포함되어야 합니다!
     Optional<ActivityLog> findTopByComputerIdAndProcessNameAndLogTypeOrderByIdDesc(
             String computerId,
             String processName,

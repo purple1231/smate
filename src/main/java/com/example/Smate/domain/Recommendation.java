@@ -32,7 +32,7 @@ public class Recommendation {
     @Column(name = "recommended_app_path", columnDefinition = "TEXT")
     private String recommendedAppPath;
 
-    @Column(name = "message", columnDefinition = "TEXT") // 👈 [추가] 멘트 필드
+    @Column(name = "message", columnDefinition = "TEXT")
     private String message;
 
     // ✨ [수정] 생성자 오버로딩 (message 필드 포함)
@@ -41,7 +41,7 @@ public class Recommendation {
         this.recommendedApp = recommendedApp;
         this.reasonApp = reasonApp;
         this.recommendedAppPath = recommendedAppPath;
-        this.message = message; // 👈 [추가] 멘트 설정
+        this.message = message;
         this.timestamp = LocalDateTime.now();
     }
 }

@@ -313,7 +313,7 @@ public class LogService {
                 if (!log.getLogTimestamp().isBefore(windowStart) && !log.getLogTimestamp().isAfter(windowEnd)
                         // 기준 앱 자신이 아니며,
                         && !log.getProcessName().equals(processName)
-                        // ✨ [중요] START 로그만 연관 앱으로 카운트
+                        // [중요] START 로그만 연관 앱으로 카운트
                         && log.getLogType() == LogType.START
                         // 이번 윈도우에서 아직 카운트되지 않았다면
                         && processedInWindow.add(log.getProcessName())) {

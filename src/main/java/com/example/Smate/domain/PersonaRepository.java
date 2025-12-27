@@ -43,6 +43,6 @@ public class PersonaRepository {
     }
 
     public static Persona getPersona(String name) {
-        return PERSONAS.getOrDefault(name, PERSONAS.get("mesugaki")); // 디폴트는 메스가키입니다 :)
+        return PERSONAS.getOrDefault(name, PERSONAS.get("mesugaki"));
     }
 }

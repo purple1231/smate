@@ -51,7 +51,6 @@ public class GeminiService {
         this.webClient = WebClient.create("https://generativelanguage.googleapis.com");
     }
 
-    // ... (callGemini 메서드는 기존과 동일) ...
     public Mono<String> callGemini(String sessionId, String domain, String input) {
         // (기존 코드와 동일)
         Persona persona = PersonaRepository.getPersona(domain);
@@ -90,16 +89,16 @@ public class GeminiService {
 
 
     /**
-     * ⭐️ [수정됨] 멀티모달(텍스트 + 이미지) API 호출
+     * 멀티모달(텍스트 + 이미지) API 호출
      * - 'input' 값에 따라 프롬프트를 분기합니다.
      */
     public Mono<String> callGeminiWithVision(String sessionId, String domain, String input, byte[] imageBytes) {
         Persona persona = PersonaRepository.getPersona(domain);
         Deque<String> history = sessionMemory.computeIfAbsent(sessionId, k -> new LinkedList<>());
 
-        String textPrompt; // ⭐️ 프롬프트를 담을 변수
+        String textPrompt; // 프롬프트를 담을 변수
 
-        // ⭐️ [핵심] 'input' 값에 따라 프롬프트 분기
+        // [핵심] 'input' 값에 따라 프롬프트 분기
         if ("[SYSTEM_SCREENSHOT]".equals(input)) {
             // 1. (신규) 시스템 스크린샷용 "재밌는 말" 프롬프트
             // log.info("[Vision] 시스템 스크린샷용 '재밌는 말' 프롬프트 사용"); // (로그 추가)
@@ -112,7 +111,7 @@ public class GeminiService {
                        **이 캐릭터에 대해서는 절대 언급하거나 반응하지 마.**
                        오직 사용자가 '무엇을 하고 있는지'(예: 코딩, 웹 서핑, 바탕화면)에 대해서만 집중해서 말해.
                     4. 너의 페르소나를 완벽하게 유지하면서, 너무 길지 않게 한두 문장으로 말해줘.
-                    5. ⭐️ [중요] 이 응답은 사용자가 직접 물어본 것이 아니므로, 절대 대화 이력(History)에 저장하면 안 돼.
+                    5. [중요] 이 응답은 사용자가 직접 물어본 것이 아니므로, 절대 대화 이력(History)에 저장하면 안 돼.
                     
                     [예시: (페르소나: 츤데레)]
                     (화면: 코딩 중) -> "흥... 또 에러난 거야? 맨날 그것도 못하고."
@@ -153,7 +152,7 @@ public class GeminiService {
 
         // 4. 멀티모달 요청 본문(Body) 생성 (공통)
         List<VisionPart> parts = new ArrayList<>();
-        parts.add(new VisionPart(textPrompt)); // ⭐️ 분기된 textPrompt 사용
+        parts.add(new VisionPart(textPrompt)); // 분기된 textPrompt 사용
         parts.add(new VisionPart(new InlineData("image/png", imageBase64)));
 
         VisionRequest body = new VisionRequest(List.of(new VisionContent(parts)));
@@ -170,7 +169,7 @@ public class GeminiService {
                 .bodyToMono(String.class)
                 .map(this::extractFirstText)
                 .doOnNext(reply -> {
-                    // ⭐️ [수정] 시스템 스크린샷이 아닐 때만 대화 이력에 저장
+                    // 시스템 스크린샷이 아닐 때만 대화 이력에 저장
                     if (!"[SYSTEM_SCREENSHOT]".equals(input)) {
                         history.addLast("Q: " + input + "\nA: " + reply);
                         if (history.size() > 10) history.removeFirst();
@@ -179,7 +178,6 @@ public class GeminiService {
     }
 
 
-    // ... (extractTaskFromMessage 메서드는 기존과 동일) ...
     public TaskDto extractTaskFromMessage(String userMessage) {
         // (기존 코드와 동일)
         if (userMessage == null ||
@@ -199,7 +197,7 @@ public class GeminiService {
                 1. '내일 오후 3시', '10분 뒤' 같은 상대적 시간도 [오늘 날짜]를 기준으로 'YYYY-MM-DD HH:MM' 형식으로 계산해. (시간은 24시 표기법)
                 2. 'text'는 할 일을 짧고 명확하게 요약해.
                 3. 만약 문장이 '알람' 등의 키워드를 포함해도, 실제 '요청'이 아니라 단순한 잡담이나 질문이라면 (예: "알람 시끄러워", "내일 일정 있어?"), {"time": null, "text": null} 을 반환해.
-                4. ⭐️ [절대 규칙] 설명, 사과, 인사 등 어떠한 텍스트도 JSON 객체 외에 절대 출력하지 마. 오직 JSON 코드만 응답해.
+                4. [절대 규칙] 설명, 사과, 인사 등 어떠한 텍스트도 JSON 객체 외에 절대 출력하지 마. 오직 JSON 코드만 응답해.
                 
                 [예시 1]
                 문장: "내일 오후 3시에 도서관 가라고 알려줘"
@@ -268,7 +266,7 @@ public class GeminiService {
                     .findTopByComputerIdAndProcessNameAndLogTypeOrderByIdDesc(
                             computerId,
                             processName,
-                            ActivityLog.LogType.START // ⭐️ [수정] LogType.START를 명시
+                            ActivityLog.LogType.START // LogType.START를 명시
                     );
             if (logEntry.isEmpty()) {
                 System.err.println(computerId + " 컴퓨터의 " + processName + " 경로를 DB에서 찾을 수 없습니다.");
@@ -301,13 +299,10 @@ public class GeminiService {
      */
     private List<String> extractExecutionTarget(String userMessage) {
 
-        // ⭐️⭐️⭐️ [핵심 수정] ⭐️⭐️⭐️
-        // "켜줘" 라는 단어가 없으면 앱 실행 API를 아예 호출하지 않습니다.
-        if (userMessage == null || !userMessage.contains("켜줘"))
-        {
+
+        if (userMessage == null || !userMessage.contains("켜줘")) {
             return null;
         }
-        // ⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️⭐️
 
         // "켜줘"가 있을 때만 Gemini에게 물어봅니다.
         String prompt = """
@@ -317,9 +312,9 @@ public class GeminiService {
                 1. '스포티파이 켜줘', '노래 켜줘' -> "spotify"
                 2. '디코 켜줘', '디스코드 켜줘' -> "discord"
                 3. 'vscode 켜줘', '코드 켜줘' -> "code"
-                4. ⭐️ [중요] "노래 들으면서 코딩하게 켜줘" 처럼 여러 개가 감지되면 ["spotify", "code"] 처럼 배열에 모두 담아.
+                4. [중요] "노래 들으면서 코딩하게 켜줘" 처럼 여러 개가 감지되면 ["spotify", "code"] 처럼 배열에 모두 담아.
                 5. 만약 문장이 키워드를 포함해도, 실제 '요청'이 아니라면 (예: "스포티파이 좋아?"), {"apps": null} 또는 {"apps": []}를 반환해.
-                6. ⭐️ [절대 규칙] 설명, 사과, 인사 등 어떠한 텍스트도 JSON 객체 외에 절대 출력하지 마. 오직 JSON 코드만 응답해.
+                6. [절대 규칙] 설명, 사과, 인사 등 어떠한 텍스트도 JSON 객체 외에 절대 출력하지 마. 오직 JSON 코드만 응답해.
                 [예시 1]
                 문장: "스포티파이 켜줘"
                 응답: {"apps": ["spotify"]}
@@ -363,7 +358,6 @@ public class GeminiService {
         }
     }
 
-    // ... (sendExecutionCommandToPython 메서드는 기존과 동일) ...
     private void sendExecutionCommandToPython(String path) {
         Map<String, Object> body = Map.of("command", path);
         webClient.post()
@@ -373,12 +367,11 @@ public class GeminiService {
                 .retrieve()
                 .bodyToMono(String.class)
                 .subscribe(
-                        response -> System.out.println("✅ [Python] 실행 요청 성공: " + response),
-                        error -> System.err.println("❌ [Python] 실행 요청 실패: " + error.getMessage())
+                        response -> System.out.println("[Python] 실행 요청 성공: " + response),
+                        error -> System.err.println("[Python] 실행 요청 실패: " + error.getMessage())
                 );
     }
 
-    // ... (extractFirstText 메서드는 기존과 동일) ...
     private String extractFirstText(String geminiRaw) {
         try {
             JsonNode root = objectMapper.readTree(geminiRaw);
@@ -393,7 +386,7 @@ public class GeminiService {
 
 
 
-    // --- ⭐️ [신규] 멀티모달 요청을 위한 DTO 클래스들 ---
+    // ---[신규] 멀티모달 요청을 위한 DTO 클래스들 ---
 
     private static class VisionRequest {
         @JsonProperty("contents")

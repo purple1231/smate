@@ -9,7 +9,7 @@ import java.time.LocalDateTime;
 
 @Entity
 @Getter
-@NoArgsConstructor // JPA는 기본 생성자가 꼭 필요합니다.
+@NoArgsConstructor
 @Table(name = "activity_log") // 실제 DB 테이블 이름
 public class ActivityLog {
 
@@ -33,7 +33,7 @@ public class ActivityLog {
     @Column(nullable = false)
     private LocalDateTime logTimestamp;
 
-    @Column(name = "computer_id") // ✨ DB의 computer_id 컬럼과 연결
+    @Column(name = "computer_id") // DB의 computer_id 컬럼과 연결
     private String computerId;
 
     // ✨ [추가] 로그 타입 컬럼
@@ -51,7 +51,7 @@ public class ActivityLog {
         this.logTimestamp = requestDto.getLogTimestamp();
         this.computerId = requestDto.getComputerId();
 
-        // ✨ [수정] DTO의 문자열을 Enum으로 변환
+        // DTO의 문자열을 Enum으로 변환
         if ("STOP".equalsIgnoreCase(requestDto.getLogType())) {
             this.logType = LogType.STOP;
         } else {
